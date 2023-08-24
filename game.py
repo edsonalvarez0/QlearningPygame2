@@ -91,7 +91,7 @@ class game_env:
         img = pygame.transform.scale(img,(self.cell_dim,self.cell_dim))
         DISPLAYSURF.blit(img,cood)
         pygame.display.update()
-        clock.tick(1024)    
+        clock.tick(256)    
     
     def cood_state_calc(self,cood):
         '''
@@ -177,11 +177,30 @@ class game_env:
             if is_valid:
                 self.steps_visualizer(cood)
             else:
+                return str(current_state)
                 break
             
+    def episode_no_sprites(self, current_state, is_valid):
+        #episodio de training
+        cood = self.state_cood_calc(current_state)
+        already_visited = [cood]
+        
+        while current_state!=self.last_cell and is_valid==True:
+
+            choice = random.choices([True,False],weights=[self.greedy,self.random],k=1)
+            if choice[0]:
+                     action = np.argmax(self.q_table[current_state])
+            else:
+                     action = random.choices([0,1,2,3],weights=[0.25,0.25,0.25,0.25],k=1)
+                     action = action[0]
+            is_valid, current_state, cood = self.q_table_update(current_state, action, already_visited)
+            
+            already_visited.append(cood)
+            if not is_valid:
+                break            
     
     def training(self, epoch):
-                    self.p=1024
+                    self.p=48
                     state=random.randint(self.first_cell,self.last_cell)
                     self.initial_state()
                     self.print_text(' Episode:{}'.format(epoch),(180,50),30)
@@ -200,24 +219,32 @@ class game_env:
                         with open('env_weights\\weights_{}.npy'.format(self.suffix),'wb') as f:
                             np.save(f,self.q_table)
                     
-                    clock.tick(1024)
+                    clock.tick(48)
 
 
-    def sec_training(self, epoch):
-                    for i in range (self.columns*self.rows*4):
-                           int(i//4)
+    def training_no_sprites(self, epoch):
+                        self.p=8
+                        state=random.randint(self.first_cell,self.last_cell)
+                        self.episode_no_sprites(state, True)  
+                        print('episode {} ---->'.format(epoch))
+                        if epoch%50==0:
+                            if self.random>0:
+                                    self.greedy+=self.delta
+                                    self.random-=self.delta
+                                    self.greedy = min(self.greedy,1)
+                                    self.random= max(self.random,0)
+                            
+                        if epoch%2000==0:
+                            self.delta*=2
+                            with open('env_weights\\weights_{}.npy'.format(self.suffix),'wb') as f:
+                                np.save(f,self.q_table)
                            
-                           
-                           
-                           
-
-
 
     def testing(self,initial_state=0):
             self.p=8
             self.greedy = 1
             self.random = 0
-            self.print_text(' Testing',(160,50),30)
+            self.print_text(' Episode:{}'.format("test"),(180,50),30)
             with open('env_weights\\env_{}.npy'.format(self.suffix),'rb') as f:
                 self.game_grid = np.load(f)
             
@@ -225,34 +252,45 @@ class game_env:
                 self.q_table = np.load(f)
             
             self.initial_state()
-            self.episode(initial_state,True,self.p)
-            self.print_text(' Testing',(180,50),30)
+            lleo=self.episode(initial_state,True,self.p)
+            print(lleo)
             clock.tick(8)
-
-game = game_env('news')
-pygame.init()
-count=1
-flag = 0
-
-DISPLAYSURF = pygame.display.set_mode(game.game_dim,0,32)
-clock = pygame.time.Clock()
-
-while True:
-    game.training(count)
-    count+=1
-    if count%3002==0:
-        pygame.quit()
-        break
-    for event in pygame.event.get():
-                if event.type==QUIT:
-                            pygame.quit()
-                            flag = 1
-                            raise Exception('game ended')
-    if flag==1:
-        break
+            
 
 
-game = game_env('news')
+print("----------------------------------\n Define an existing or new training name: ")
+game_env_name=input("")
+print("Start training?: (y/n)")
+desicion=input()
+if desicion.upper()!="N":
+    game = game_env(game_env_name)
+    pygame.init()
+    count=1
+    flag = 0
+
+    DISPLAYSURF = pygame.display.set_mode(game.game_dim,0,32)
+    clock = pygame.time.Clock()
+
+    while True:
+
+        
+        count+=1
+        if count<3900:
+            game.training_no_sprites(count)
+        else:
+            game.training(count)
+        if count%4002==0:
+            pygame.quit()
+            break
+        for event in pygame.event.get():
+                    if event.type==QUIT:
+                                pygame.quit()
+                                flag = 1
+                                raise Exception('game ended')
+        if flag==1:
+            break
+
+game = game_env(game_env_name)
 flag = 0
 
 pygame.init()

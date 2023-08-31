@@ -11,15 +11,16 @@ class game_env:
         self.delta = 0.005
         self.q_table = np.zeros((100,4))
         self.reward_map = {'water.png':-20, 'grass.png':-3,'rock.png':-100,'flowers.png':0,'pig.png':500,'house.png':-500,'already_visited':-10,'invalid':-100}
-        self.game_dim = (500,650)
+        self.game_dim = (600,600)
         self.first_cell=0
         self.last_cell=99
-        self.text_space=150
+        self.text_space=0
         self.initial_cood = (0,0+ self.text_space)
         self.rows,self.columns= 10,10
         self.cell_dim = self.game_dim[0]/self.rows
         self.final_cood = (self.game_dim[0]-self.cell_dim, self.game_dim[1]-self.cell_dim)
         self.game_grid = self.new_game_env()
+        #self.game_grid = self.set_load("hgggggggggfgfgfgfgfggfgfgfgfgfwwwgffwwwrrrrrgrrrrrgggrgrffffrffffrgfffggrrrfffrfgggggffggfgggggggggp")
         self.suffix = suffix
         self.action_space = {0:{'x':-1*self.cell_dim,'y':0},
                               2:{'x':self.cell_dim,'y':0}, 
@@ -37,6 +38,17 @@ class game_env:
             with open('env_weights\\weights_{}.npy'.format(self.suffix),'wb') as file:
                                 np.save(file,self.q_table)
             pass 
+    def random_board(self):           
+         self.game_grid = self.new_game_env()
+    def set_load(self,map):
+        matrix=[]           
+        for i in map:
+            cell="grass.png" if i=="g" else "water.png" if i=="w" else "rock.png" if i=="r" else "flowers.png" if i=="f" else "house.png" if i=="h" else "pig.png"
+            matrix.append(cell)
+        matrix = np.asarray(matrix).reshape(self.rows,self.columns)
+        return matrix    
+
+
     def new_game_env(self):
         #Crea el tablero
         matrix = random.choices(['grass.png','water.png','rock.png','flowers.png'],weights=[0.35,0.25,0.20,0.20], k=self.rows*self.columns)
@@ -63,7 +75,7 @@ class game_env:
         for x in range(self.rows):
                 for y in range(self.columns):
                     img = self.load_images(self.game_grid[x][y])
-                    cood = (y*self.cell_dim,x*self.cell_dim+self.text_space)
+                    cood = (y*self.cell_dim,x*self.cell_dim)
                     DISPLAYSURF.blit(img,cood)
         pygame.display.update()
     def steps_visualizer(self,cood):
@@ -111,7 +123,7 @@ class game_env:
         already_visited = [cood]
         self.steps_visualizer(cood)     
         while current_state!=self.last_cell and is_valid==True:
-            pygame.draw.rect(DISPLAYSURF,(0,0,0),(0,100,self.game_dim[0],50))
+            #pygame.draw.rect(DISPLAYSURF,(0,0,0),(0,100,self.game_dim[0],50))
             pygame.display.update()
             for event in pygame.event.get():
                 if event.type==QUIT:
@@ -130,7 +142,7 @@ class game_env:
             if is_valid:
                 self.steps_visualizer(cood)
             else:
-                return ((cood))       
+                return (self.to_cood(cood))       
     def episode_no_sprites(self, current_state, is_valid):
         #episodio de training
         cood = self.to_pygame_cood(current_state)
@@ -184,15 +196,14 @@ class game_env:
             self.p=8
             self.greedy = 1
             self.random = 0
-            self.print_text(' Episode:{}'.format("test"),(180,50),30)
+            #self.print_text(' Episode:{}'.format("test"),(180,50),30)
             with open('env_weights\\env_{}.npy'.format(self.suffix),'rb') as f:
                 self.game_grid = np.load(f) 
             with open('env_weights\\weights_{}.npy'.format(self.suffix),'rb') as f:
                 self.q_table = np.load(f) 
             self.initial_state()
             lleo=self.episode(initial_state,True,self.p)
-            clock.tick(8) 
-            print(lleo)
+            clock.tick(8)
             return lleo      
 print("----------------------------------\n Define an existing or new training name: ")
 game_env_name=input("")
@@ -207,11 +218,11 @@ if desicion.upper()!="N":
     clock = pygame.time.Clock()
     while True:
         count+=1
-        if count<3900:
+        if count<4900:
             game.training_no_sprites(count)
         else:
             game.training(count)
-        if count%3002==0:
+        if count%5002==0:
             pygame.quit()
             break
         for event in pygame.event.get():
@@ -224,8 +235,9 @@ if desicion.upper()!="N":
 game = game_env(game_env_name)
 flag = 0
 pygame.init()
-DISPLAYSURF = pygame.display.set_mode(game.game_dim,0,32)
 pygame.display.set_caption('Reinforcement Learning')
+DISPLAYSURF = pygame.display.set_mode(game.game_dim,0,32)
+
 clock = pygame.time.Clock()
 while True:
     game.testing()

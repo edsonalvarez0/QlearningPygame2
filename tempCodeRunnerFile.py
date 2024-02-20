@@ -1,0 +1,1 @@
+state=random.randint(self.first_cell,self.last_cell)

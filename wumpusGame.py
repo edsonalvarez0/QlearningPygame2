@@ -41,6 +41,9 @@ class game_env:
         img = pygame.image.load('{}'.format(img_path))
         img = pygame.transform.scale(img,(self.cell_dim,self.cell_dim))
         return img  
+    def display_smth(self, cood, file):
+        img = pygame.transform.scale(pygame.image.load(file),(self.cell_dim,self.cell_dim))
+        DISPLAYSURF.blit(img,cood)
     def print_text(self,text,cood,size):
         font = pygame.font.Font(pygame.font.get_default_font(), size)
         text_surface = font.render(text, True, (255,255,255))
@@ -82,18 +85,19 @@ class game_env:
                 new_cood = (int(cood[0] + self.action_space[i]['x']), int(cood[1] + self.action_space[i]['y']))
                 if self.initial_cood[0]<=new_cood[0]<=self.final_cood[0] and self.initial_cood[1]<=new_cood[1]<=self.final_cood[1]:
                       actions.append(i)
-                      #actions.append(self.to_cood(new_cood))
+
         return actions    
     
-    def check_moves(self,valid_coods,valid_actions,already_visited): #v_coods in self.to_pygame_cood
+    def check_moves(self,curr_cood,valid_coods,valid_actions,already_visited): #v_coods in self.to_pygame_cood
         safePit=True
         for v_c in valid_coods:
-            if self.game_list[v_c]=="pit.png" and safePit:
+            if self.game_grid[v_c//self.rows][v_c%self.rows]=="pit.png" and safePit:
                   safePit=False
-                  self.display_smth(self.coods, "breeze.png")
-                  for i in valid_coods:
-                       if i not in already_visited:
-                            self.rates_table[i]-=10
+                  if self.display:
+                    self.display_smth(curr_cood, "breeze.png")
+                  for i in valid_actions:
+                       if (int(curr_cood[0] + self.action_space[i]['x']), int(curr_cood[1] + self.action_space[i]['y'])) not in already_visited:
+                            self.q_table[self.to_cood(curr_cood)][i]-=10
                   break
 
 
@@ -107,8 +111,16 @@ class game_env:
         is_valid = self.is_valid_move(new_cood, already_visited)     
         valid_actions=self.valid_moves(curr_cood)
         valid_coods = [self.to_cood((int(curr_cood[0] + self.action_space[i]['x']), int(curr_cood[1] + self.action_space[i]['y']))) for i in valid_actions]
-        #self.check_moves(valid_coods,valid_actions,already_visited)
-
+        trapped=True
+        for v_c in valid_coods:
+            if self.game_grid[v_c//self.rows][v_c%self.rows]=="square.png":
+                trapped=False
+        if trapped:
+            clock.tick(1000)
+            pygame.quit()
+            raise Exception('No puedo salir')
+        self.check_moves(curr_cood,valid_coods,valid_actions,already_visited)
+  
         if is_valid:
             reward = self.reward_map[self.game_grid[int(new_state//self.rows)][int(new_state%self.rows)]]
         elif new_cood in already_visited:
@@ -119,18 +131,18 @@ class game_env:
             state_value_diff = max(self.q_table[new_state]) - self.q_table[state][action]
         except:
             state_value_diff = 0
-        self.q_table[state][action]+=self.alfa*(reward + self.beta*state_value_diff)
-
-                                                  
+        self.q_table[state][action]+=self.alfa*(reward + self.beta*state_value_diff)                                    
         return is_valid, new_state, new_cood
+    
     def episode(self, current_state, is_valid,p):
         #episodio de training
         pygame.event.get()
+        count=0
         cood = self.to_pygame_cood(current_state)
         already_visited = [cood]
         self.steps_visualizer(cood)
-        while current_state!=self.last_cell and is_valid==True:
-            #pygame.draw.rect(DISPLAYSURF,(0,0,0),(0,100,self.game_dim[0],50))
+        while is_valid==True:
+            pygame.display.set_caption('Moves={}'.format(count))
             pygame.display.update()
             for event in pygame.event.get():
                 if event.type==QUIT:
@@ -142,19 +154,25 @@ class game_env:
             else:
                      action = random.choices([0,1,2,3],weights=[0.25,0.25,0.25,0.25],k=1)
                      action = action[0]
-            is_valid, current_state, cood = self.q_table_update(current_state, action, already_visited)        
+            is_valid, current_state, cood = self.q_table_update(current_state, action, already_visited)
+            count+=1        
+            
             pygame.display.update()
             clock.tick(p)
             already_visited.append(cood)
             if is_valid:
                 self.steps_visualizer(cood)
-            else:
-                return (self.to_cood(cood))       
+                lastcell=(self.to_cood(cood))
+        
+
+        return (self.game_grid[lastcell//self.columns][lastcell%self.rows]=="gold.png")
+ 
     def episode_no_sprites(self, current_state, is_valid):
         #episodio de training
         cood = self.to_pygame_cood(current_state)
+
         already_visited = [cood]     
-        while current_state!=self.last_cell and is_valid==True:
+        while is_valid==True:
             choice = random.choices([True,False],weights=[self.greedy,self.random],k=1)
             if choice[0]:
                      action = np.argmax(self.q_table[current_state])
@@ -162,37 +180,50 @@ class game_env:
                      action = random.choices([0,1,2,3],weights=[0.25,0.25,0.25,0.25],k=1)
                      action = action[0]
             is_valid, current_state, cood = self.q_table_update(current_state, action, already_visited)           
-            already_visited.append(cood)
-           
+            already_visited.append(cood)       
 
     def training_no_sprites(self, epoch):
+                        self.display=False
                         self.p=8
                         state=self.first_cell
                         self.episode_no_sprites(state, True)  
-                        print('episode {} ---->'.format(epoch))
+                        #print('episode {} ---->'.format(epoch))
                         if epoch%50==0:
                             if self.random>0:
                                     self.greedy+=self.delta
                                     self.random-=self.delta
                                     self.greedy = min(self.greedy,1)
                                     self.random= max(self.random,0)                      
-                        if epoch%200==0:
+                        if epoch%(200)==0:
                             self.delta*=2
+                        if epoch%1000==0:
+                              dummy_greedy=self.greedy
+                              dummy_random=self.random
+                              finished=self.testing()
+                              if finished:
+                                    return finished
+                              else:
+                                    self.greedy = dummy_greedy
+                                    self.random = dummy_random
+          
+                        return False
+
             
     def testing(self,initial_state=0):
+            self.display=True
             self.p=8
             self.greedy = 1
             self.random = 0
-            self.print_text(' Episode:{}'.format("test"),(180,50),30)
             self.initial_state()
-            lleo=self.episode(initial_state,True,self.p)
-            clock.tick(8)
-            return lleo      
+            finsihed=self.episode(initial_state,True,self.p)
+            clock.tick(2)
+            return finsihed          
 
 print("Start training?: (y/n)")
 desicion=input()
 if desicion.upper()!="N":
-    game = game_env(8)
+    size=4
+    game = game_env(size)
     pygame.init()
     count=1
     flag = 0
@@ -200,9 +231,11 @@ if desicion.upper()!="N":
     clock = pygame.time.Clock()
     while True:
         count+=1
-
-        game.training_no_sprites(count)
-        if count%2000==0:
+        finishes=game.training_no_sprites(count)
+        if finishes:
+            pygame.quit()
+            break              
+        if count==3000:
             pygame.quit()
             break
         for event in pygame.event.get():
